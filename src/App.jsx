@@ -49,6 +49,7 @@ const Sidebar = ({ activeTab, setActiveTab, isMobileOpen, setIsMobileOpen, profi
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [newProfileName, setNewProfileName] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
 
   const currentProfile = profiles.find(p => p.id === currentProfileId) || profiles[0] || { name: 'Guest', id: 'guest' };
 
@@ -65,11 +66,20 @@ const Sidebar = ({ activeTab, setActiveTab, isMobileOpen, setIsMobileOpen, profi
     setIsEditing(false);
   };
 
-  const handleAddProfile = async () => {
+  const handleAddProfile = async (e) => {
+    if (e) e.preventDefault();
     if (newProfileName.trim()) {
-      await onAddProfile(newProfileName);
-      setNewProfileName("");
-      setIsEditing(false);
+      setIsSaving(true);
+      try {
+        await onAddProfile(newProfileName);
+        setNewProfileName("");
+        setIsEditing(false);
+      } catch (error) {
+        console.error("Failed to add profile", error);
+        alert("Failed to add profile. Please check your internet connection or Firebase configuration.\n\nError: " + error.message);
+      } finally {
+        setIsSaving(false);
+      }
     }
   };
 
@@ -85,7 +95,7 @@ const Sidebar = ({ activeTab, setActiveTab, isMobileOpen, setIsMobileOpen, profi
         </button>
       </div>
 
-      <nav className="mt-6 px-4 space-y-2 flex-1">
+      <nav className="mt-6 px-4 space-y-2 flex-1 overflow-y-auto">
         {menuItems.map((item) => (
           <button
             key={item.id}
@@ -105,58 +115,76 @@ const Sidebar = ({ activeTab, setActiveTab, isMobileOpen, setIsMobileOpen, profi
       </nav>
 
       {/* User Profile Section */}
-      <div className="relative border-t bg-gray-50">
+      <div className="relative border-t bg-gray-50 z-20">
         {showProfileMenu && (
-          <div className="absolute bottom-full left-0 w-full bg-white border-t border-r border-l rounded-t-xl shadow-lg p-4 space-y-3">
-            <h3 className="font-semibold text-gray-700">Select Profile</h3>
-            <div className="space-y-2 max-h-40 overflow-y-auto">
-              {profiles.map(profile => (
-                <button
-                  key={profile.id}
-                  onClick={() => {
-                    setCurrentProfileId(profile.id);
-                    setShowProfileMenu(false);
-                  }}
-                  className={`w-full flex items-center gap-2 p-2 rounded-lg ${currentProfileId === profile.id ? 'bg-green-100 text-green-800' : 'hover:bg-gray-100'}`}
-                >
-                  <div className="h-8 w-8 rounded-full bg-green-200 flex items-center justify-center text-green-700 text-xs font-bold">
-                    {profile.name.charAt(0).toUpperCase()}
-                  </div>
-                  <span className="text-sm truncate">{profile.name}</span>
-                  {currentProfileId === profile.id && <div className="ml-auto w-2 h-2 bg-green-500 rounded-full"></div>}
-                </button>
-              ))}
-            </div>
+          <>
+            {/* Backdrop to close menu when clicking outside */}
+            <div className="fixed inset-0 z-10" onClick={() => setShowProfileMenu(false)}></div>
 
-            {isEditing ? (
-              <div className="mt-2">
-                <input
-                  type="text"
-                  value={newProfileName}
-                  onChange={(e) => setNewProfileName(e.target.value)}
-                  placeholder="Enter Name"
-                  className="w-full p-2 border rounded-lg text-sm mb-2"
-                  autoFocus
-                />
-                <div className="flex gap-2">
-                  <button onClick={handleAddProfile} className="flex-1 bg-green-600 text-white py-1 rounded text-sm">Save</button>
-                  <button onClick={() => setIsEditing(false)} className="flex-1 bg-gray-200 text-gray-700 py-1 rounded text-sm">Cancel</button>
-                </div>
+            <div className="absolute bottom-full left-0 w-full bg-white border-t border-r border-l rounded-t-xl shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] p-4 space-y-3 z-20">
+              <h3 className="font-semibold text-gray-700">Select Profile</h3>
+              <div className="space-y-2 max-h-40 overflow-y-auto">
+                {profiles.map(profile => (
+                  <button
+                    key={profile.id}
+                    onClick={() => {
+                      setCurrentProfileId(profile.id);
+                      setShowProfileMenu(false);
+                    }}
+                    className={`w-full flex items-center gap-2 p-2 rounded-lg ${currentProfileId === profile.id ? 'bg-green-100 text-green-800' : 'hover:bg-gray-100'}`}
+                  >
+                    <div className="h-8 w-8 rounded-full bg-green-200 flex items-center justify-center text-green-700 text-xs font-bold">
+                      {profile.name.charAt(0).toUpperCase()}
+                    </div>
+                    <span className="text-sm truncate">{profile.name}</span>
+                    {currentProfileId === profile.id && <div className="ml-auto w-2 h-2 bg-green-500 rounded-full"></div>}
+                  </button>
+                ))}
               </div>
-            ) : (
-              <button
-                onClick={() => setIsEditing(true)}
-                className="w-full flex items-center justify-center gap-2 p-2 border border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 hover:border-green-500 hover:text-green-600"
-              >
-                <Plus className="h-4 w-4" /> Add New Profile
-              </button>
-            )}
-          </div>
+
+              {isEditing ? (
+                <form onSubmit={handleAddProfile} className="mt-2">
+                  <input
+                    type="text"
+                    value={newProfileName}
+                    onChange={(e) => setNewProfileName(e.target.value)}
+                    placeholder="Enter Name"
+                    className="w-full p-2 border rounded-lg text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-green-500"
+                    autoFocus
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      type="submit"
+                      disabled={isSaving}
+                      className="flex-1 bg-green-600 text-white py-1 rounded text-sm hover:bg-green-700 disabled:opacity-50"
+                    >
+                      {isSaving ? 'Saving...' : 'Save'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsEditing(false)}
+                      disabled={isSaving}
+                      className="flex-1 bg-gray-200 text-gray-700 py-1 rounded text-sm hover:bg-gray-300"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <button
+                  onClick={() => setIsEditing(true)}
+                  className="w-full flex items-center justify-center gap-2 p-2 border border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 hover:border-green-500 hover:text-green-600"
+                >
+                  <Plus className="h-4 w-4" /> Add New Profile
+                </button>
+              )}
+            </div>
+          </>
         )}
 
         <button
           onClick={handleProfileClick}
-          className="w-full p-4 flex items-center gap-3 hover:bg-gray-100 transition-colors text-left"
+          className="w-full p-4 flex items-center gap-3 hover:bg-gray-100 transition-colors text-left relative z-20"
         >
           <div className="h-10 w-10 rounded-full bg-green-600 flex items-center justify-center text-white font-bold text-lg">
             {currentProfile.name.charAt(0).toUpperCase()}
@@ -450,16 +478,21 @@ const MedicineOrder = ({ currentProfileId }) => {
     setShowCart(false);
 
     // Save order to Firebase
-    const orderData = {
-      profileId: currentProfileId,
-      items: cart,
-      total: getTotal(),
-      status: 'paid'
-    };
+    try {
+      const orderData = {
+        profileId: currentProfileId,
+        items: cart,
+        total: getTotal(),
+        status: 'paid'
+      };
 
-    await saveOrder(orderData);
-    setCart([]);
-    alert(`Order Placed Successfully! Total: ₹${orderData.total}\nSaved to your account.`);
+      await saveOrder(orderData);
+      setCart([]);
+      alert(`Order Placed Successfully! Total: ₹${orderData.total}\nSaved to your account.`);
+    } catch (error) {
+      console.error("Failed to save order", error);
+      alert("Payment successful, but failed to save order to history.\n\nError: " + error.message);
+    }
   };
 
   return (
@@ -566,8 +599,12 @@ const PillReminders = ({ currentProfileId }) => {
   useEffect(() => {
     const loadReminders = async () => {
       if (currentProfileId) {
-        const data = await getReminders(currentProfileId);
-        setReminders(data);
+        try {
+          const data = await getReminders(currentProfileId);
+          setReminders(data);
+        } catch (error) {
+          console.error("Failed to load reminders", error);
+        }
       }
     };
     loadReminders();
@@ -580,7 +617,16 @@ const PillReminders = ({ currentProfileId }) => {
       r.id === id ? { ...r, taken: newStatus } : r
     ));
 
-    await updateReminderStatus(id, newStatus);
+    try {
+      await updateReminderStatus(id, newStatus);
+    } catch (error) {
+      console.error("Failed to update reminder", error);
+      alert("Failed to update reminder status. Please check your connection.");
+      // Revert optimistic update
+      setReminders(reminders.map(r =>
+        r.id === id ? { ...r, taken: currentStatus } : r
+      ));
+    }
   };
 
   const handleAddReminder = async () => {
@@ -592,12 +638,17 @@ const PillReminders = ({ currentProfileId }) => {
         taken: false
       };
 
-      const saved = await addReminder(newReminder);
-      if (saved) {
-        setReminders([...reminders, saved]);
-        setNewMedName("");
-        setNewMedTime("");
-        setIsAdding(false);
+      try {
+        const saved = await addReminder(newReminder);
+        if (saved) {
+          setReminders([...reminders, saved]);
+          setNewMedName("");
+          setNewMedTime("");
+          setIsAdding(false);
+        }
+      } catch (error) {
+        console.error("Failed to add reminder", error);
+        alert("Failed to save reminder. Please check your internet connection or Firebase configuration.\n\nError: " + error.message);
       }
     }
   };
@@ -705,25 +756,34 @@ function App() {
   useEffect(() => {
     const loadData = async () => {
       setIsLoading(true);
-      const fetchedProfiles = await getProfiles();
+      try {
+        const fetchedProfiles = await getProfiles();
 
-      if (fetchedProfiles) {
-        setProfiles(fetchedProfiles);
-        // Try to restore last used profile, else use first one
-        const lastId = localStorage.getItem('sanjeevani_current_profile_id');
-        if (lastId && fetchedProfiles.find(p => p.id === lastId)) {
-          setCurrentProfileId(lastId);
+        if (fetchedProfiles) {
+          setProfiles(fetchedProfiles);
+          // Try to restore last used profile, else use first one
+          const lastId = localStorage.getItem('sanjeevani_current_profile_id');
+          if (lastId && fetchedProfiles.find(p => p.id === lastId)) {
+            setCurrentProfileId(lastId);
+          } else {
+            setCurrentProfileId(fetchedProfiles[0].id);
+          }
         } else {
-          setCurrentProfileId(fetchedProfiles[0].id);
+          // First time user or no internet: create a default local profile to start
+          // In a real app we might force a login here
+          const defaultProfile = { id: 'local-guest', name: 'Guest User', age: 60 };
+          setProfiles([defaultProfile]);
+          setCurrentProfileId(defaultProfile.id);
         }
-      } else {
-        // First time user or no internet: create a default local profile to start
-        // In a real app we might force a login here
+      } catch (error) {
+        console.error("Failed to load profiles", error);
+        // Fallback to local guest profile on error
         const defaultProfile = { id: 'local-guest', name: 'Guest User', age: 60 };
         setProfiles([defaultProfile]);
         setCurrentProfileId(defaultProfile.id);
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     };
 
     loadData();

@@ -9,7 +9,7 @@ export const getProfiles = async () => {
         return profiles.length > 0 ? profiles : null;
     } catch (e) {
         console.error("Error getting profiles: ", e);
-        return null;
+        throw e;
     }
 };
 
@@ -23,7 +23,7 @@ export const addProfile = async (name, age = 60) => {
         return { id: docRef.id, name, age };
     } catch (e) {
         console.error("Error adding profile: ", e);
-        return null;
+        throw e;
     }
 };
 
@@ -37,7 +37,7 @@ export const saveOrder = async (order) => {
         return true;
     } catch (e) {
         console.error("Error saving order: ", e);
-        return false;
+        throw e;
     }
 };
 
@@ -49,7 +49,7 @@ export const getReminders = async (profileId) => {
         return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     } catch (e) {
         console.error("Error getting reminders: ", e);
-        return [];
+        throw e;
     }
 };
 
@@ -59,7 +59,7 @@ export const addReminder = async (reminder) => {
         return { id: docRef.id, ...reminder };
     } catch (e) {
         console.error("Error adding reminder: ", e);
-        return null;
+        throw e;
     }
 };
 
@@ -70,6 +70,6 @@ export const updateReminderStatus = async (id, taken) => {
         return true;
     } catch (e) {
         console.error("Error updating reminder: ", e);
-        return false;
+        throw e;
     }
 };
