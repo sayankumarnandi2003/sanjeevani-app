@@ -60,14 +60,8 @@ Want to run this locally? Follow these simple steps:
     ```
 
 ## 📸 Screenshots
+(will Upload later)
 
-| Dashboard | AI Chatbot |
-|:---:|:---:|
-| *Your health at a glance* | * empathetic medical advice* |
-
-| Pharmacy | Payment Gateway |
-|:---:|:---:|
-| *Easy medicine ordering* | *Secure & smooth checkout* |
 
 ## 🤝 Contributing
 
@@ -75,8 +69,8 @@ We love contributions! If you have ideas to make Sanjeevani better—maybe addin
 
 ## 📄 License
 
-This project is open-source and available under the [MIT License](LICENSE).
+This project is open-source.
 
 ---
 
-Made with ❤️ for a healthier India.
+Made with ❤️ by SAYAN for a healthier India.
