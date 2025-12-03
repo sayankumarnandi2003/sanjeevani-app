@@ -69,7 +69,7 @@ Create a file named .env in the root directory.
 
 Add your Google Gemini API Key:
 
-VITE_GEMINI_API_KEY=your_actual_api_key_starting_with_AIza
+VITE_GEMINI_API_KEY=your_actual_api_key_
 
 
 4. Run the Development Server
@@ -79,9 +79,7 @@ npm run dev
 
 Open your browser and navigate to http://localhost:5173.
 
-📸 Screenshots
 
-(You can upload screenshots of your app to your repo and link them here to make your README look amazing)
 
 Dashboard
 
