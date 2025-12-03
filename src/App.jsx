@@ -21,6 +21,8 @@ import {
 } from 'lucide-react';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { findLocalAnswer } from './healthData';
+import { getProfiles, addProfile, saveOrder, getReminders, addReminder, updateReminderStatus } from './services/db';
+import PaymentModal from './components/PaymentModal';
 
 // API Key from Environment Variables
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
@@ -28,7 +30,7 @@ const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 // --- Mock Data & Helpers ---
 
 const MOCK_MEDICINES = [
-  { id: 1, name: "Paracetamol 650mg", price: 30, category: "Fever", image: "hhttps://www.stelonbiotech.com/wp-content/uploads/2022/04/PYREMUST-650-TAB.jpg" },
+  { id: 1, name: "Paracetamol 650mg", price: 30, category: "Fever", image: "https://www.stelonbiotech.com/wp-content/uploads/2022/04/PYREMUST-650-TAB.jpg" },
   { id: 2, name: "Cetirizine 10mg", price: 25, category: "Allergy", image: "https://placehold.co/400x300/e2e8f0/1e293b?text=Cetirizine" },
   { id: 3, name: "Vitamin C Supplements", price: 150, category: "Immunity", image: "https://placehold.co/400x300/e2e8f0/1e293b?text=Vitamin+C" },
   { id: 4, name: "Amoxicillin 500mg", price: 85, category: "Antibiotic", image: "https://placehold.co/400x300/e2e8f0/1e293b?text=Amoxicillin" },
@@ -48,7 +50,7 @@ const Sidebar = ({ activeTab, setActiveTab, isMobileOpen, setIsMobileOpen, profi
   const [isEditing, setIsEditing] = useState(false);
   const [newProfileName, setNewProfileName] = useState("");
 
-  const currentProfile = profiles.find(p => p.id === currentProfileId) || profiles[0];
+  const currentProfile = profiles.find(p => p.id === currentProfileId) || profiles[0] || { name: 'Guest', id: 'guest' };
 
   const menuItems = [
     { id: 'dashboard', label: 'Health Dashboard', icon: Activity },
@@ -63,9 +65,9 @@ const Sidebar = ({ activeTab, setActiveTab, isMobileOpen, setIsMobileOpen, profi
     setIsEditing(false);
   };
 
-  const handleAddProfile = () => {
+  const handleAddProfile = async () => {
     if (newProfileName.trim()) {
-      onAddProfile(newProfileName);
+      await onAddProfile(newProfileName);
       setNewProfileName("");
       setIsEditing(false);
     }
@@ -161,7 +163,7 @@ const Sidebar = ({ activeTab, setActiveTab, isMobileOpen, setIsMobileOpen, profi
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-gray-900 truncate">{currentProfile.name}</p>
-            <p className="text-xs text-gray-500 truncate">ID: {currentProfile.id}</p>
+            <p className="text-xs text-gray-500 truncate">ID: {currentProfile.id.substring(0, 6)}...</p>
           </div>
           <ChevronRight className={`h-5 w-5 text-gray-400 transition-transform ${showProfileMenu ? 'rotate-90' : ''}`} />
         </button>
@@ -422,9 +424,10 @@ const SOS = () => {
 };
 
 // 4. Medicine Order Component
-const MedicineOrder = () => {
+const MedicineOrder = ({ currentProfileId }) => {
   const [cart, setCart] = useState([]);
   const [showCart, setShowCart] = useState(false);
+  const [isPaymentOpen, setIsPaymentOpen] = useState(false);
 
   const addToCart = (med) => {
     setCart([...cart, med]);
@@ -439,9 +442,24 @@ const MedicineOrder = () => {
   const getTotal = () => cart.reduce((sum, item) => sum + item.price, 0);
 
   const handleCheckout = () => {
-    alert(`Order Placed Successfully! Total: ₹${getTotal()}\nWait for delivery partner confirmation.`);
-    setCart([]);
+    setIsPaymentOpen(true);
+  };
+
+  const handlePaymentSuccess = async () => {
+    setIsPaymentOpen(false);
     setShowCart(false);
+
+    // Save order to Firebase
+    const orderData = {
+      profileId: currentProfileId,
+      items: cart,
+      total: getTotal(),
+      status: 'paid'
+    };
+
+    await saveOrder(orderData);
+    setCart([]);
+    alert(`Order Placed Successfully! Total: ₹${orderData.total}\nSaved to your account.`);
   };
 
   return (
@@ -526,40 +544,61 @@ const MedicineOrder = () => {
           </div>
         </div>
       )}
+
+      <PaymentModal
+        isOpen={isPaymentOpen}
+        onClose={() => setIsPaymentOpen(false)}
+        totalAmount={getTotal()}
+        onPaymentSuccess={handlePaymentSuccess}
+      />
     </div>
   );
 };
 
 // 5. Pill Reminders Component
-const PillReminders = () => {
-  const [reminders, setReminders] = useState([
-    { id: 1, text: "Morning Diabetes Pill", time: "08:00", taken: false },
-    { id: 2, text: "Vitamin C Supplement", time: "13:00", taken: false },
-    { id: 3, text: "Night Heart Medicine", time: "21:00", taken: false },
-  ]);
-
+const PillReminders = ({ currentProfileId }) => {
+  const [reminders, setReminders] = useState([]);
   const [isAdding, setIsAdding] = useState(false);
   const [newMedName, setNewMedName] = useState("");
   const [newMedTime, setNewMedTime] = useState("");
 
-  const toggleReminder = (id) => {
+  // Load reminders from DB
+  useEffect(() => {
+    const loadReminders = async () => {
+      if (currentProfileId) {
+        const data = await getReminders(currentProfileId);
+        setReminders(data);
+      }
+    };
+    loadReminders();
+  }, [currentProfileId]);
+
+  const toggleReminder = async (id, currentStatus) => {
+    const newStatus = !currentStatus;
+    // Optimistic update
     setReminders(reminders.map(r =>
-      r.id === id ? { ...r, taken: !r.taken } : r
+      r.id === id ? { ...r, taken: newStatus } : r
     ));
+
+    await updateReminderStatus(id, newStatus);
   };
 
-  const handleAddReminder = () => {
-    if (newMedName && newMedTime) {
+  const handleAddReminder = async () => {
+    if (newMedName && newMedTime && currentProfileId) {
       const newReminder = {
-        id: Date.now(),
+        profileId: currentProfileId,
         text: newMedName,
         time: newMedTime,
         taken: false
       };
-      setReminders([...reminders, newReminder]);
-      setNewMedName("");
-      setNewMedTime("");
-      setIsAdding(false);
+
+      const saved = await addReminder(newReminder);
+      if (saved) {
+        setReminders([...reminders, saved]);
+        setNewMedName("");
+        setNewMedTime("");
+        setIsAdding(false);
+      }
     }
   };
 
@@ -604,6 +643,9 @@ const PillReminders = () => {
       )}
 
       <div className="space-y-3">
+        {reminders.length === 0 && !isAdding && (
+          <p className="text-gray-500 text-center py-4">No reminders found. Add one above!</p>
+        )}
         {reminders.map((reminder) => (
           <div
             key={reminder.id}
@@ -625,7 +667,7 @@ const PillReminders = () => {
               </div>
             </div>
             <button
-              onClick={() => toggleReminder(reminder.id)}
+              onClick={() => toggleReminder(reminder.id, reminder.taken)}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${reminder.taken
                 ? 'bg-gray-200 text-gray-600 hover:bg-gray-300'
                 : 'bg-green-600 text-white hover:bg-green-700'
@@ -647,13 +689,9 @@ function App() {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
   // Profile State
-  const [profiles, setProfiles] = useState(() => {
-    const saved = localStorage.getItem('sanjeevani_profiles');
-    return saved ? JSON.parse(saved) : [{ id: '1', name: 'User', age: 65 }];
-  });
-  const [currentProfileId, setCurrentProfileId] = useState(() => {
-    return localStorage.getItem('sanjeevani_current_profile_id') || '1';
-  });
+  const [profiles, setProfiles] = useState([]);
+  const [currentProfileId, setCurrentProfileId] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   // API Key State
   const [apiKey, setApiKey] = useState(() => {
@@ -663,27 +701,63 @@ function App() {
     return localStorage.getItem('gemini_api_key') || '';
   });
 
+  // Load Profiles from Firebase
   useEffect(() => {
-    localStorage.setItem('sanjeevani_profiles', JSON.stringify(profiles));
-  }, [profiles]);
+    const loadData = async () => {
+      setIsLoading(true);
+      const fetchedProfiles = await getProfiles();
+
+      if (fetchedProfiles) {
+        setProfiles(fetchedProfiles);
+        // Try to restore last used profile, else use first one
+        const lastId = localStorage.getItem('sanjeevani_current_profile_id');
+        if (lastId && fetchedProfiles.find(p => p.id === lastId)) {
+          setCurrentProfileId(lastId);
+        } else {
+          setCurrentProfileId(fetchedProfiles[0].id);
+        }
+      } else {
+        // First time user or no internet: create a default local profile to start
+        // In a real app we might force a login here
+        const defaultProfile = { id: 'local-guest', name: 'Guest User', age: 60 };
+        setProfiles([defaultProfile]);
+        setCurrentProfileId(defaultProfile.id);
+      }
+      setIsLoading(false);
+    };
+
+    loadData();
+  }, []);
 
   useEffect(() => {
-    localStorage.setItem('sanjeevani_current_profile_id', currentProfileId);
+    if (currentProfileId) {
+      localStorage.setItem('sanjeevani_current_profile_id', currentProfileId);
+    }
   }, [currentProfileId]);
 
   useEffect(() => {
     if (apiKey) localStorage.setItem('gemini_api_key', apiKey);
   }, [apiKey]);
 
-  const handleAddProfile = (name) => {
-    const newProfile = { id: Date.now().toString(), name, age: 60 };
-    setProfiles([...profiles, newProfile]);
-    setCurrentProfileId(newProfile.id);
+  const handleAddProfile = async (name) => {
+    const newProfile = await addProfile(name);
+    if (newProfile) {
+      setProfiles([...profiles, newProfile]);
+      setCurrentProfileId(newProfile.id);
+    }
   };
 
-  const currentProfile = profiles.find(p => p.id === currentProfileId) || profiles[0];
+  const currentProfile = profiles.find(p => p.id === currentProfileId) || profiles[0] || { name: 'Loading...' };
 
   const renderContent = () => {
+    if (isLoading) {
+      return (
+        <div className="flex items-center justify-center h-full">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
+        </div>
+      );
+    }
+
     switch (activeTab) {
       case 'dashboard':
         return (
@@ -715,7 +789,7 @@ function App() {
                 <p className="text-3xl font-bold">95 <span className="text-sm text-gray-500 font-normal">mg/dL</span></p>
               </div>
             </div>
-            <PillReminders />
+            <PillReminders currentProfileId={currentProfileId} />
           </div>
         );
       case 'chat':
@@ -723,9 +797,9 @@ function App() {
       case 'sos':
         return <SOS />;
       case 'order':
-        return <MedicineOrder />;
+        return <MedicineOrder currentProfileId={currentProfileId} />;
       case 'reminders':
-        return <PillReminders />;
+        return <PillReminders currentProfileId={currentProfileId} />;
       default:
         return <div className="text-center py-10">Page Under Construction</div>;
     }
